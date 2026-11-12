@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import duckdb
 import statsmodels.api as sm
-from statsmodels.compat import linalg
 from scipy import stats
 from sklearn.metrics import r2_score, mean_squared_error
 import matplotlib.pyplot as plt
