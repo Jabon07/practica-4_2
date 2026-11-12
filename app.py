@@ -6,6 +6,15 @@ from scipy import stats
 from sklearn.metrics import r2_score, mean_squared_error
 import matplotlib.pyplot as plt
 import seaborn as sns
+import streamlit as st
+
+st.set_page_config(
+    page_title="Regresión lineal múltiple",
+    page_icon=":material/water_drop:",
+    layout="wide",
+)
+st.title("Regresión lineal múltiple")
+st.caption("Análisis del consumo de agua con datos simulados en DuckDB.")
 
 # ==============================================================================
 # PASO 1: SIMULACIÓN DE DATOS RELACIONALES EN DUCKDB (DETERMINISTA)
@@ -38,21 +47,30 @@ FROM generate_series(1, 100);
 # Extraer el dataset a DataFrame de Pandas
 df_agua = con.execute("SELECT * FROM datos_agua").df()
 
-print("--- PASO 1: PRIMEROS 5 REGISTROS OBTENIDOS DE DUCKDB ---")
-print(df_agua.head())
-print("\n" + "="*70 + "\n")
+st.header("1. Datos simulados")
+st.dataframe(
+    df_agua.head(),
+    hide_index=True,
+    alt="Primeras cinco filas de los datos simulados de consumo de agua",
+)
 
 # ==============================================================================
 # PASO 2: MATRIZ DE CORRELACIÓN DE PEARSON (r)
 # ==============================================================================
 columnas_interes = ['temperatura_max', 'humedad_max', 'personas_familia', 'consumo_bidon_pc', 'cpc_consumo']
 matriz_correlacion = df_agua[columnas_interes].corr()
+correlacion_respuesta = matriz_correlacion['cpc_consumo'].drop('cpc_consumo')
 
-print("--- PASO 2: MATRIZ DE CORRELACIÓN DE PEARSON (r) ---")
-print(matriz_correlacion)
-print("\nCorrelación lineal de cada variable con la respuesta 'cpc_consumo':")
-print(matriz_correlacion['cpc_consumo'].drop('cpc_consumo'))
-print("\n" + "="*70 + "\n")
+st.header("2. Matriz de correlación de Pearson")
+st.dataframe(
+    matriz_correlacion,
+    alt="Correlación de Pearson entre las variables del modelo",
+)
+st.subheader("Correlación con el consumo")
+st.dataframe(
+    correlacion_respuesta.rename("Correlación").to_frame(),
+    alt="Correlación de cada variable explicativa con el consumo",
+)
 
 # ==============================================================================
 # PASO 3: AJUSTE DEL MODELO OLS (statsmodels)
@@ -66,9 +84,8 @@ X_const = sm.add_constant(X)
 # Ajustar el modelo OLS
 modelo = sm.OLS(y, X_const).fit()
 
-print("--- PASO 3: RESUMEN DEL MODELO OLS (statsmodels) ---")
-print(modelo.summary())
-print("\n" + "="*70 + "\n")
+st.header("3. Modelo de regresión OLS")
+st.code(modelo.summary().as_text(), language=None)
 
 # ==============================================================================
 # PASO 4: DIAGNÓSTICO DE RESIDUOS Y SUPUESTOS
@@ -78,17 +95,20 @@ y_pred = modelo.fittedvalues
 
 # 1. Prueba de Normalidad (Shapiro-Wilk)
 stat_shapiro, p_val_shapiro = stats.shapiro(residuos)
-print("--- PASO 4: DIAGNÓSTICO DE RESIDUOS Y SUPUESTOS ---")
-print(f"1. Prueba de Normalidad (Shapiro-Wilk): Estadístico = {stat_shapiro:.4f}, valor p = {p_val_shapiro:.4f}")
+st.header("4. Diagnóstico de residuos")
+shapiro_col, p_value_col, dw_col = st.columns(3)
+shapiro_col.metric("Estadístico Shapiro-Wilk", f"{stat_shapiro:.4f}")
+p_value_col.metric("Valor p", f"{p_val_shapiro:.4f}")
+
 if p_val_shapiro > 0.05:
-    print("   -> CONCLUSIÓN: Los residuos cumplen con el supuesto de NORMALIDAD (p > 0.05).")
+    st.success("Los residuos cumplen con el supuesto de normalidad (p > 0.05).")
 else:
-    print("   -> CONCLUSIÓN: Los residuos NO cumplen con el supuesto de NORMALIDAD (p <= 0.05).")
+    st.warning("Los residuos no cumplen con el supuesto de normalidad (p <= 0.05).")
 
 # 2. Estadístico Durbin-Watson (Independencia)
 dw = sm.stats.stattools.durbin_watson(residuos)
-print(f"2. Estadístico Durbin-Watson (Independencia): {dw:.4f} (Valores entre 1.5 y 2.5 indican ausencia de autocorrelación).")
-print("\n" + "="*70 + "\n")
+dw_col.metric("Estadístico Durbin-Watson", f"{dw:.4f}")
+st.caption("Valores entre 1.5 y 2.5 indican ausencia de autocorrelación.")
 
 # ==============================================================================
 # PASO 5: MÉTRICAS DE RENDIMIENTO DEL MODELO (scikit-learn)
@@ -96,17 +116,25 @@ print("\n" + "="*70 + "\n")
 r2 = r2_score(y, y_pred)
 rmse = np.sqrt(mean_squared_error(y, y_pred))
 
-print("--- PASO 5: MÉTRICAS DE RENDIMIENTO DEL MODELO (scikit-learn) ---")
-print(f"Coeficiente de Determinación (R²):       {r2 * 100:.2f}%")
-print(f"Error Cuadrático Medio Raíz (RMSE):      {rmse:.4f} lt/hab-día")
+st.header("5. Rendimiento del modelo")
+r2_col, rmse_col = st.columns(2)
+r2_col.metric("Coeficiente de determinación (R²)", f"{r2 * 100:.2f}%")
+rmse_col.metric("Error cuadrático medio raíz (RMSE)", f"{rmse:.4f} lt/hab-día")
 params = modelo.params
-print(f"Ecuación del Modelo Ajustado:")
-print(f"CPC = {params['const']:.2f} + ({params['temperatura_max']:.2f} * Temp) + ({params['humedad_max']:.2f} * Humedad) + ({params['personas_familia']:.2f} * Personas) + ({params['consumo_bidon_pc']:.2f} * Bidón)")
-print("\n" + "="*70 + "\n")
+ecuacion_modelo = (
+    f"CPC = {params['const']:.2f} "
+    f"+ ({params['temperatura_max']:.2f} * Temp) "
+    f"+ ({params['humedad_max']:.2f} * Humedad) "
+    f"+ ({params['personas_familia']:.2f} * Personas) "
+    f"+ ({params['consumo_bidon_pc']:.2f} * Bidón)"
+)
+st.subheader("Ecuación del modelo ajustado")
+st.code(ecuacion_modelo, language=None)
 
 # ==============================================================================
 # PASO 6: GENERACIÓN DEL PANEL DE DIAGNÓSTICO VISUAL (5 GRÁFICAS)
 # ==============================================================================
+st.header("6. Panel de diagnóstico visual")
 sns.set_theme(style="whitegrid")
 fig, axes = plt.subplots(2, 3, figsize=(18, 10))
 fig.suptitle('Panel de Diagnóstico Visual: Regresión Lineal Múltiple (Subtema 4.2)', fontsize=16, fontweight='bold')
@@ -144,4 +172,7 @@ axes[1, 1].set_title('5. Gráfico Q-Q Normal (Residuos)')
 axes[1, 2].axis('off')
 
 plt.tight_layout()
-plt.show()
+st.pyplot(
+    fig,
+    alt="Panel con cinco gráficos de diagnóstico de la regresión lineal",
+)
