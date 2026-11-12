@@ -1,0 +1,9 @@
+
+numpy
+pandas
+duckdb
+statsmodels
+scikit-learn
+matplotlib
+seaborn
+scipy
